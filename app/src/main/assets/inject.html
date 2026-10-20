@@ -1,0 +1,98 @@
+<meta name="viewport" id="app-viewport" content="width=device-width,initial-scale=1">
+<script>
+  // Render the page at __SCALE__ size: give it a layout width of screen-width / scale. Some WebViews
+  // (e.g. Android TV) ignore initial-scale without an explicit width and fall back to 980px.
+  (function(){
+    var S = __SCALE__, meta = document.getElementById('app-viewport');
+    function fit(){
+      var w = Math.round(screen.width / S);
+      meta.setAttribute('content', 'width=' + w + ',initial-scale=' + S + ',minimum-scale=' + S + ',maximum-scale=' + S + ',user-scalable=no');
+    }
+    fit();
+    window.addEventListener('orientationchange', function(){ setTimeout(fit, 200); });
+  })();
+</script>
+<style>
+  /* App toolbar: bottom-left, styled like the site's own "Skins" button */
+  #appbar{ position:fixed; bottom:10px; left:14px; z-index:10001; display:flex; gap:6px; align-items:center; }
+  #appbar #skinbtn{ position:static; }
+  #appbar .ab{ cursor:pointer; background:#000; color:#00e000; font-family:'Winamp', monospace; font-size:14px;
+    border:none; border-radius:4px; padding:4px 10px; line-height:1.2; }
+  #appbar .ab:focus, #appbar #skinbtn:focus{ outline:2px solid #ff90e8; outline-offset:1px; }
+  /* narrow screens: lift the credit line so it clears the toolbar */
+  @media (max-width: 720px){
+    #preserve{ bottom:40px; }
+  }
+  /* the app has no chat */
+  #chat{ display:none !important; }
+  /* Clear view: hide everything but the background video; the toolbar keeps only its eye button */
+  html.app-clear #app, html.app-clear #nowplaying, html.app-clear #listeners,
+  html.app-clear #schedule, html.app-clear #preserve, html.app-clear #appbar > :not(#ab-clear){ display:none !important; }
+  /* Webamp mounts its windows here, outside #app; opacity (not visibility) also hides its slider thumbs */
+  html.app-clear #webamp{ opacity:0 !important; pointer-events:none !important; }
+  html.app-clear #ab-clear{ background:rgba(0,0,0,.5); }
+</style>
+<script>
+(function(){
+  var root = document.documentElement;
+  function get(k, d){ try { var v = localStorage.getItem(k); return v === null ? d : v; } catch(e){ return d; } }
+  function set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+  function btn(id, label, title, onClick){
+    var b = document.createElement('button');
+    b.id = id; b.className = 'ab'; b.type = 'button'; b.textContent = label; b.title = title;
+    b.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); onClick(); });
+    return b;
+  }
+  function setScale(delta){
+    var s = Math.round((__SCALE__ + delta) * 10) / 10;
+    s = Math.max(0.5, Math.min(1.5, s));
+    if (window.AppBridge) AppBridge.setScale(s);   // app saves it and reloads with the new viewport
+  }
+
+  // Winamp size. On screens >= 600px wide the site switches Webamp to Double Size (DBL) and stacks it
+  // big on the left. Unless "2x" is chosen, keep it 1x and stack it in the bottom-left corner instead.
+  // The site's code reads the globals DBL and layoutWindows by name, so overriding them is enough.
+  var bigWinamp = get('appWinampBig', '0') === '1';
+  function smallLayout(){
+    try {
+      var wh = 116, x = 14, y = Math.max(8, window.innerHeight - wh * 3 - 48);   // 48px clears the toolbar
+      // undo the site's widened 2x playlist, if it already applied it
+      wa.store.dispatch({ type:'WINDOW_SIZE_CHANGED', windowId:'playlist', size:[0,0], width:0, height:0 });
+      wa.store.dispatch({ type:'UPDATE_WINDOW_POSITIONS', absolute:true,
+        positions:{ main:{ x:x, y:y }, equalizer:{ x:x, y:y + wh }, playlist:{ x:x, y:y + wh * 2 } } });
+    } catch(e){}
+  }
+
+  // Remote center/OK button (sent by the app). On a focused toolbar button or inside the skin picker
+  // it presses that element; anywhere else it switches to the next background video, using the site's
+  // own rotation (bgLoad + nextBgVid: covers the switch, then seeks to a random point).
+  window.appCenterButton = function(){
+    var a = document.activeElement;
+    if (a && a !== document.body && a.closest && a.closest('#appbar, #skinmodal')) { a.click(); return 'click'; }
+    try { var id = nextBgVid(); bgLoad(id); return 'background ' + id; } catch(e){ return 'error ' + e; }
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var canDouble = !!window.DBL;   // the site only uses Double Size on wide screens
+    if (!bigWinamp && canDouble) {
+      window.DBL = false;
+      window.layoutWindows = smallLayout;
+      // in case Webamp already rendered in Double Size before this ran
+      try { if (wa && wa.store.getState().display.doubled) { wa.store.dispatch({ type:'TOGGLE_DOUBLESIZE_MODE' }); smallLayout(); } } catch(e){}
+    }
+
+    var bar = document.createElement('div'); bar.id = 'appbar';
+    var skins = document.getElementById('skinbtn');
+    bar.appendChild(btn('ab-clear', '◉', 'Clear view: show only the background', function(){
+      root.classList.toggle('app-clear');
+    }));
+    if (skins) bar.appendChild(skins);
+    if (canDouble) bar.appendChild(btn('ab-size', bigWinamp ? '1×' : '2×',
+      'Winamp size', function(){ set('appWinampBig', bigWinamp ? '0' : '1'); location.reload(); }));
+    bar.appendChild(btn('ab-minus', '−', 'Smaller', function(){ setScale(-0.1); }));
+    bar.appendChild(btn('ab-plus', '+', 'Bigger', function(){ setScale(0.1); }));
+    document.body.appendChild(bar);
+  });
+})();
+</script>

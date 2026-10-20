@@ -1,0 +1,15 @@
+# Gradle / Android build output
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+
+# Machine-specific
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# Local Claude Code settings
+.claude/settings.local.json
